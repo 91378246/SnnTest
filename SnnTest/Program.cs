@@ -17,6 +17,7 @@ Network network = new(new int[] { 2, 2 }, rnd, 1);
 Console.WriteLine($"Fitting XOR for {EPOCHS} epochs");
 
 double lowestError = double.MaxValue;
+double avgError = 0;
 for (int epoch = 0; epoch < EPOCHS; epoch++)
 {
     double error = 0;
@@ -31,18 +32,24 @@ for (int epoch = 0; epoch < EPOCHS; epoch++)
 
     // Console.Clear();
     error /= SAMPLE_COUNT;
-    Console.WriteLine($"Epoch {epoch} error: {error}");
-    network.Report(epoch);
-
+    avgError += error;
     if (error < lowestError)
     {
         lowestError = error;
     }
+
+    if (epoch % 10 == 0)
+    {
+        Console.WriteLine($"Epoch {epoch} error: {error}");
+        network.Report(epoch);
+    }
 }
 
+network.Report(EPOCHS - 1);
 Console.ForegroundColor = ConsoleColor.Green;
 Console.WriteLine($"\n##### DONE #####");
 Console.ForegroundColor = ConsoleColor.Gray;
+Console.WriteLine($"Average error: {avgError /= EPOCHS}");
 Console.WriteLine($"Lowest error: {lowestError}\n");
 
 Console.WriteLine($"Running {TEST_COUNT} tests ...");
@@ -170,7 +177,7 @@ sealed class Network
     private const double INTERVAL_DURATION = 25;
     private const double TIME_STEP = 0.1;
     private const double LEARNING_RATE = 0.0125;
-    private const int SYN_PER_NEURON = 3;
+    private const int SYN_PER_NEURON = 5;
 
     private List<List<Neuron>> Neurons { get; } = new();
     private int[] Dimensions { get; }
@@ -441,6 +448,12 @@ sealed class Neuron
 
     public void UpdateInputWeights(double desiredSpikeTime, double learningRate, double decayTime, int synPerNeuron)
     {
+        //foreach(Synapse preSyn in SynapsesIn)
+        //{
+        //    preSyn.UpdateWeight(desiredSpikeTime, learningRate, decayTime);
+        //}
+        //return;
+
         ///// delta_output_layer /////
         double s = 0;
         if (FirstSpikeT != -1)
@@ -448,7 +461,7 @@ sealed class Neuron
             // Pre-Neuron
             for (int neuronPreI = 0; neuronPreI < SynapsesIn.Count / synPerNeuron; neuronPreI++)
             {
-                // Synapse per per-neuron
+                // Synapse per pre-neuron
                 int neuronSynStartIndex = neuronPreI * synPerNeuron;
                 if (SynapsesIn[neuronSynStartIndex].NeuronPre.FirstSpikeT != -1)
                 {
@@ -520,7 +533,7 @@ sealed class Synapse
         double dividend = 0;
         foreach (double spikeT in NeuronPre.SpikeTs)
         {
-            dividend += Neuron.SpikeResponseFunction_23(NeuronPost.FirstSpikeT - spikeT - Delay, decayTime);
+            dividend += Neuron.SpikeResponseFunction_24(NeuronPost.FirstSpikeT - spikeT - Delay, decayTime);
         }
         dividend *= -1;
 
@@ -535,7 +548,7 @@ sealed class Synapse
             }
             else if (spikeDistance > 0)
             {
-                divisor += Weight * (1 / spikeDistance - 1 / decayTime) * Neuron.SpikeResponseFunction_23(spikeDistance, decayTime);
+                divisor += Weight * (1 / spikeDistance - 1 / decayTime) * Neuron.SpikeResponseFunction_24(spikeDistance, decayTime);
             }
         }
 
@@ -545,6 +558,11 @@ sealed class Synapse
         if (!double.IsNaN(deltaW))
         {
             Weight += deltaW;
+        }
+
+        if (Weight < 0)
+        {
+            Weight = 0;
         }
     }
 }
