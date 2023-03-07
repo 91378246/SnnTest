@@ -1,15 +1,18 @@
-﻿const int SEED = 1;
-const int EPOCHS = 100;
+﻿using SnnTest;
+
+const int SEED = 1;
+const int EPOCHS = 50;
 const int SAMPLE_COUNT = 1000;
+const int TEST_COUNT = 100;
 
 Random rnd = new(SEED);
-Network network = new(new int[] { 2, 2 }, rnd);
 (double[][] samples, bool[] labels) = GenerateXORData(SAMPLE_COUNT, rnd);
 List<double[]> desiredSpikeTimes = new();
 for (int i = 0; i < SAMPLE_COUNT; i++)
 {
     desiredSpikeTimes.Add(labels[i] ? new double[] { 10, 6 } : new double[] { 6, 10 }); // Magic numbers ???
 }
+Network network = new(new int[] { 2, 2 }, rnd, 1);
 
 Console.WriteLine($"Fitting XOR for {EPOCHS} epochs");
 
@@ -41,6 +44,43 @@ Console.ForegroundColor = ConsoleColor.Green;
 Console.WriteLine($"\n##### DONE #####");
 Console.ForegroundColor = ConsoleColor.Gray;
 Console.WriteLine($"Lowest error: {lowestError}\n");
+
+Console.WriteLine($"Running {TEST_COUNT} tests ...");
+ConfusionMatrix cm = new();
+(samples, labels) = GenerateXORData(TEST_COUNT, rnd);
+for (int i = 0; i < TEST_COUNT; i++)
+{
+    Shuffle(samples, labels, rnd);
+    network.Reset();
+    network.Forward(samples[i]);
+
+    bool prediction = Convert.ToBoolean(network.GetCurrentlyPredictedClass());
+    if (prediction)
+    {
+        if (labels[i])
+        {
+            cm.TruePositives++;
+        }
+        else
+        {
+            cm.FalsePositives++;
+        }
+    }
+    else
+    {
+        if (labels[i])
+        {
+            cm.FalseNegatives++;
+        }
+        else
+        {
+            cm.TrueNegatives++;
+        }
+    }
+
+}
+Console.WriteLine(cm.ToString());
+Console.ReadLine();
 
 static (double[][], bool[]) GenerateXORData(int n, Random rnd, bool shuffle = true, double sigma = 0.075)
 {
@@ -123,19 +163,24 @@ static void Shuffle(double[][] values, bool[] labels, Random rnd)
 
 sealed class Network
 {
-    private const double THRESHOLD = 5;
+    private const double THRESHOLD = 1;
     private const double MIN_DELAY = 1;
     private const double MAX_DELAY = 8;
     private const double DECAY_TIME = 7;
     private const double INTERVAL_DURATION = 25;
     private const double TIME_STEP = 0.1;
-    private const double LEARNING_RATE = 0.001;
+    private const double LEARNING_RATE = 0.0125;
+    private const int SYN_PER_NEURON = 3;
 
     private List<List<Neuron>> Neurons { get; } = new();
     private int[] Dimensions { get; }
 
-    public Network(int[] dimensions, Random rnd, int synapsesPerNeuron = 3)
+    public Network(int[] dimensions, Random rnd, int avgSpikeCountPerInputNeuron)
     {
+        Console.ForegroundColor = ConsoleColor.Blue;
+        Console.WriteLine($"Calculated optimal learning rate: {GetBestLearningRate()}");
+        Console.ForegroundColor = ConsoleColor.Gray;
+
         Dimensions = dimensions;
 
         // Layers
@@ -157,13 +202,13 @@ sealed class Network
             // Pre-Neurons
             for (int i = 0; i < Dimensions[l]; i++)
             {
+                (double[] weights, double[] delays) = GetSynapseInitVals(Dimensions[l]);
+
                 // Post Neurons
                 for (int j = 0; j < Dimensions[l + 1]; j++)
                 {
-                    (double[] weights, double[] delays) = GetSynapseInitVals(Dimensions[l]);
-
                     // Synapses
-                    for (int s = 0; s < synapsesPerNeuron; s++)
+                    for (int s = 0; s < SYN_PER_NEURON; s++)
                     {
                         Synapse syn = new(Neurons[l][i], Neurons[l + 1][j], weights[s], delays[s]);
                         Neurons[l][i].SynapsesOut.Add(syn);
@@ -173,6 +218,9 @@ sealed class Network
             }
         }
 
+        double GetBestLearningRate() =>
+            THRESHOLD / (dimensions[^2] * SYN_PER_NEURON * avgSpikeCountPerInputNeuron * (Neuron.TAU_M - Neuron.TAU_S));
+
         static double CalculateAlpha()
         {
             double div = MIN_DELAY / DECAY_TIME;
@@ -181,11 +229,11 @@ sealed class Network
 
         (double[] weights, double[] delays) GetSynapseInitVals(int prevLayerSize)
         {
-            double w_min = DECAY_TIME / (synapsesPerNeuron * prevLayerSize * alpha);
-            double w_max = DECAY_TIME / (synapsesPerNeuron * prevLayerSize * alpha);
-            double[] weights = Enumerable.Repeat(0.0, synapsesPerNeuron).Select(d => rnd.NextDouble() * (w_max - w_min) + w_min).ToArray();
-            double[] delays = Enumerable.Range(0, synapsesPerNeuron).Select(i => MIN_DELAY + (MAX_DELAY - MIN_DELAY) * ((double)i / (synapsesPerNeuron <= 1 ? 1 : synapsesPerNeuron - 1))).ToArray();
-            
+            double w_min = DECAY_TIME / (SYN_PER_NEURON * prevLayerSize * alpha);
+            double w_max = DECAY_TIME / (SYN_PER_NEURON * prevLayerSize * alpha);
+            double[] weights = Enumerable.Repeat(0.0, SYN_PER_NEURON).Select(d => rnd.NextDouble() * (w_max - w_min) + w_min).ToArray();
+            double[] delays = Enumerable.Range(0, SYN_PER_NEURON).Select(i => MIN_DELAY + (MAX_DELAY - MIN_DELAY) * ((double)i / (SYN_PER_NEURON <= 1 ? 1 : SYN_PER_NEURON - 1))).ToArray();
+
             return (weights, delays);
         }
     }
@@ -232,6 +280,22 @@ sealed class Network
         }
     }
 
+    public int GetCurrentlyPredictedClass()
+    {
+        double firstSpikeTime = double.MaxValue;
+        int prediction = -1;
+        for (int i = 0; i < Dimensions[^1]; i++)
+        {
+            if (Neurons[^1][i].FirstSpikeT < firstSpikeTime)
+            {
+                firstSpikeTime = Neurons[^1][i].FirstSpikeT;
+                prediction = i;
+            }
+        }
+
+        return prediction;
+    }
+
     public double CalculateError(double[] desiredSpikeTimes)
     {
         double error = 0;
@@ -247,20 +311,12 @@ sealed class Network
     public void Backward(double[] desiredSpikeTimes)
     {
         // Layers
-        for (int l = 0; l < Dimensions.Length - 1; l++)
+        for (int l = Dimensions.Length - 1; l > 0; l--)
         {
-            // Pre-Neurons
+            // Neurons
             for (int i = 0; i < Dimensions[l]; i++)
             {
-                // Post-Neurons
-                for (int j = 0; j < Dimensions[l + 1]; j++)
-                {
-                    // Synapses
-                    for (int s = 0; s < Neurons[l][i].SynapsesOut.Count; s++)
-                    { 
-                        Neurons[l][i].SynapsesOut[s].UpdateWeight(desiredSpikeTimes[j], LEARNING_RATE, DECAY_TIME);
-                    }
-                }
+                Neurons[l][i].UpdateInputWeights(desiredSpikeTimes[i], LEARNING_RATE, DECAY_TIME, SYN_PER_NEURON);
             }
         }
     }
@@ -291,9 +347,10 @@ sealed class Network
                     // Post-Neurons
                     for (int j = 0; j < Dimensions[l + 1]; j++)
                     {
-                        for (int s = 0; s < Neurons[l][i].SynapsesOut.Count; s++)
+                        // Synapses
+                        for (int s = 0; s < SYN_PER_NEURON; s++)
                         {
-                            reportSynapses += $"Synapse {s} between [L{l}N{i}] and [L{l + 1}N{j}] weight: {Neurons[l][i].SynapsesOut[s].Weight}\n";
+                            reportSynapses += $"Synapse {s} between [L{l}N{i}] and [L{l + 1}N{j}] weight: {Neurons[l][i].SynapsesOut[j * s].Weight}\n";
                         }
                     }
                 }
@@ -320,9 +377,14 @@ sealed class Network
 
 sealed class Neuron
 {
+    public const double TAU_R = 7;
+    public const double TAU_M = 4;
+    public const double TAU_S = 2;
+
     public double Potential { get; set; }
     public List<double> SpikeTs { get; set; }
     public double FirstSpikeT => SpikeTs.Count > 0 ? SpikeTs[0] : -1;
+    public double LastSpikeT => SpikeTs.Count > 0 ? SpikeTs[^1] : -1;
     public List<Synapse> SynapsesIn { get; set; }
     public List<Synapse> SynapsesOut { get; set; }
 
@@ -355,7 +417,7 @@ sealed class Neuron
         {
             foreach (double spikeT in syn.NeuronPre.SpikeTs)
             {
-                Potential += syn.Weight * SpikeResponseFunction(t - spikeT - syn.Delay, decayTime);
+                Potential += syn.Weight * SpikeResponseFunction_24(t - spikeT - syn.Delay, decayTime);
             }
         }
 
@@ -368,14 +430,73 @@ sealed class Neuron
         return false;
     }
 
-    private static double ExponentialDecay(double s, double threshold, double tau_r = 20) =>
-        -threshold * Math.Exp(-s / tau_r) * HeavySideStepFunction(s);
+    private static double ExponentialDecay(double s, double threshold, double tauR = TAU_R) =>
+        s >= 0 ? -threshold * Math.Exp(-s / tauR) : 0;
 
-    public static double SpikeResponseFunction(double s, double tau) =>
-        s / tau * Math.Exp(1 - s / tau) * HeavySideStepFunction(s);
+    public static double SpikeResponseFunction_23(double s, double tauM = TAU_M, double tauS = TAU_S) =>
+        s >= 0 ? (Math.Exp(-s / tauM) - Math.Exp(-s / tauS)) : 0;
 
-    public static int HeavySideStepFunction(double s) =>
-        1;// s <= 0 ? 0 : 1;
+    public static double SpikeResponseFunction_24(double s, double tau) =>
+        s >= 0 ? s / tau * Math.Exp(1 - s / tau) : 0;
+
+    public void UpdateInputWeights(double desiredSpikeTime, double learningRate, double decayTime, int synPerNeuron)
+    {
+        ///// delta_output_layer /////
+        double s = 0;
+        if (FirstSpikeT != -1)
+        {
+            // Pre-Neuron
+            for (int neuronPreI = 0; neuronPreI < SynapsesIn.Count / synPerNeuron; neuronPreI++)
+            {
+                // Synapse per per-neuron
+                int neuronSynStartIndex = neuronPreI * synPerNeuron;
+                if (SynapsesIn[neuronSynStartIndex].NeuronPre.FirstSpikeT != -1)
+                {
+                    for (int sI = 0; sI < synPerNeuron; sI++)
+                    {
+                        double spikeDistance = FirstSpikeT - SynapsesIn[neuronPreI * sI].NeuronPre.FirstSpikeT - SynapsesIn[neuronPreI * sI].Delay;
+                        double weight = SynapsesIn[neuronPreI * sI].Weight;
+                        if (spikeDistance == 0)
+                        {
+                            s += weight * Math.E / decayTime;
+                        }
+                        else if (spikeDistance > 0)
+                        {
+                            s += weight * (1 / spikeDistance - 1 / decayTime) * SpikeResponseFunction_24(spikeDistance, decayTime);
+                        }
+                    }
+                }
+            }
+        }
+        double delta = s != 0 ? (desiredSpikeTime - FirstSpikeT) / s : 0;
+
+        ///// backward_prop /////
+        double[] deltaWs = new double[SynapsesIn.Count];
+        // Pre-Neuron
+        for (int neuronPreI = 0; neuronPreI < SynapsesIn.Count / synPerNeuron; neuronPreI++)
+        {
+            // Synapse per per-neuron
+            int neuronSynStartIndex = neuronPreI * synPerNeuron;
+            if (SynapsesIn[neuronSynStartIndex].NeuronPre.FirstSpikeT != -1)
+            {
+                for (int sI = 0; sI < synPerNeuron; sI++)
+                {
+                    deltaWs[neuronSynStartIndex + sI] = -learningRate 
+                        * SpikeResponseFunction_24(FirstSpikeT - SynapsesIn[neuronPreI * sI].NeuronPre.FirstSpikeT - SynapsesIn[neuronPreI * sI].Delay, decayTime) 
+                        * delta;
+                }
+            }
+        }
+
+        for (int i = 0; i < SynapsesIn.Count; i++)
+        {
+            SynapsesIn[i].Weight += deltaWs[i];
+            if (SynapsesIn[i].Weight < 0)
+            {
+                SynapsesIn[i].Weight = 0;
+            }
+        }
+    }
 }
 
 sealed class Synapse
@@ -393,12 +514,13 @@ sealed class Synapse
         Delay = delay;
     }
 
+    [Obsolete]
     public void UpdateWeight(double desiredSpikeTimePostNeuron, double learningRate, double decayTime)
     {
         double dividend = 0;
         foreach (double spikeT in NeuronPre.SpikeTs)
         {
-            dividend += Neuron.SpikeResponseFunction(NeuronPost.FirstSpikeT - spikeT - Delay, decayTime);
+            dividend += Neuron.SpikeResponseFunction_23(NeuronPost.FirstSpikeT - spikeT - Delay, decayTime);
         }
         dividend *= -1;
 
@@ -413,8 +535,8 @@ sealed class Synapse
             }
             else if (spikeDistance > 0)
             {
-                divisor += Weight * (1 / spikeDistance - 1 / decayTime) * Neuron.SpikeResponseFunction(spikeDistance, decayTime);
-            }      
+                divisor += Weight * (1 / spikeDistance - 1 / decayTime) * Neuron.SpikeResponseFunction_23(spikeDistance, decayTime);
+            }
         }
 
         double factor = -learningRate * (NeuronPost.FirstSpikeT - desiredSpikeTimePostNeuron);
@@ -425,7 +547,4 @@ sealed class Synapse
             Weight += deltaW;
         }
     }
-
-    private static double SpikeResponseFunctionDerived(double s, double tau) =>
-        (Math.Exp(1 - s / tau) * (-Neuron.HeavySideStepFunction(s))) / Math.Pow(tau, 2);
 }
