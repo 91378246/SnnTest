@@ -6,7 +6,7 @@ const int SAMPLE_COUNT = 1000;
 const int TEST_COUNT = 100;
 
 Random rnd = new(SEED);
-(double[][] samples, bool[] labels) = GenerateXORData(SAMPLE_COUNT, rnd);
+(double[][] samples, bool[] labels) = GenerateXORData(SAMPLE_COUNT, rnd, shuffle: false);
 List<double[]> desiredSpikeTimes = new();
 for (int i = 0; i < SAMPLE_COUNT; i++)
 {
@@ -23,7 +23,7 @@ for (int epoch = 0; epoch < EPOCHS; epoch++)
     double error = 0;
     for (int i = 0; i < SAMPLE_COUNT; i++)
     {
-        Shuffle(samples, labels, rnd);
+        //Shuffle(samples, labels, rnd);
         network.Reset();
         network.Forward(samples[i]);
         error += network.CalculateError(desiredSpikeTimes[i]);
@@ -384,7 +384,7 @@ sealed class Network
 
 sealed class Neuron
 {
-    public const double TAU_R = 7;
+    public const double TAU_R = 20;
     public const double TAU_M = 4;
     public const double TAU_S = 2;
 
@@ -475,7 +475,7 @@ sealed class Neuron
                         }
                         else if (spikeDistance > 0)
                         {
-                            s += weight * (1 / spikeDistance - 1 / decayTime) * SpikeResponseFunction_24(spikeDistance, decayTime);
+                            s += weight * (1 / spikeDistance - 1 / decayTime) * SpikeResponseFunction_23(spikeDistance);
                         }
                     }
                 }
@@ -495,7 +495,7 @@ sealed class Neuron
                 for (int sI = 0; sI < synPerNeuron; sI++)
                 {
                     deltaWs[neuronSynStartIndex + sI] = -learningRate 
-                        * SpikeResponseFunction_24(FirstSpikeT - SynapsesIn[neuronPreI * sI].NeuronPre.FirstSpikeT - SynapsesIn[neuronPreI * sI].Delay, decayTime) 
+                        * SpikeResponseFunction_23(FirstSpikeT - SynapsesIn[neuronPreI * sI].NeuronPre.FirstSpikeT - SynapsesIn[neuronPreI * sI].Delay) 
                         * delta;
                 }
             }
@@ -533,7 +533,7 @@ sealed class Synapse
         double dividend = 0;
         foreach (double spikeT in NeuronPre.SpikeTs)
         {
-            dividend += Neuron.SpikeResponseFunction_24(NeuronPost.FirstSpikeT - spikeT - Delay, decayTime);
+            dividend += Neuron.SpikeResponseFunction_23(NeuronPost.FirstSpikeT - spikeT - Delay);
         }
         dividend *= -1;
 
@@ -548,7 +548,7 @@ sealed class Synapse
             }
             else if (spikeDistance > 0)
             {
-                divisor += Weight * (1 / spikeDistance - 1 / decayTime) * Neuron.SpikeResponseFunction_24(spikeDistance, decayTime);
+                divisor += Weight * (1 / spikeDistance - 1 / decayTime) * Neuron.SpikeResponseFunction_23(spikeDistance);
             }
         }
 
