@@ -32,15 +32,15 @@
         /// <summary>
         /// τ_m: Time-constant with 0 < τ_s < τ_m
         /// </summary>
-        public const double TAU_M = 4;
+        public const double TAU_M = 10;
         /// <summary>
         /// τ_s: Time-constant with 0 < τ_s < τ_m
         /// </summary>
-        public const double TAU_S = 2;
+        public const double TAU_S = 5;
         /// <summary>
         /// τ_r: Time-constant
         /// </summary>
-        public const double TAU_R = 4;
+        public const double TAU_R = 10;
 
         public const int SYN_PER_NEURON = 3;
         public const int INTERVAL_DURATION = 25;

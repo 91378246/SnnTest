@@ -2,12 +2,9 @@
 
 public sealed class Network
 {
-    private const int INPUT_NEURON_COUNT = 2;
-    private const int OUTPUT_NEURON_COUNT = 2;
+    private static readonly int[] SIZE = new int[] { 2, 2, 2 };
 
-    private readonly Neuron[] InputNeurons = new Neuron[INPUT_NEURON_COUNT];
-    private readonly Neuron[] OutputNeurons = new Neuron[OUTPUT_NEURON_COUNT];
-    private readonly Synapse[] Synapses = new Synapse[INPUT_NEURON_COUNT * Parameters.SYN_PER_NEURON * OUTPUT_NEURON_COUNT];
+    private List<Neuron>[] Layers = new List<Neuron>[3];
 
     public Network(Random rnd, int avgSpikeCountPerInputNeuron)
     {
@@ -16,17 +13,35 @@ public sealed class Network
         Console.ForegroundColor = ConsoleColor.Gray;
 
         // Neurons
-        for (int i = 0; i < InputNeurons.Length; i++) 
+        for (int layerI = 0; layerI < Layers.Length; layerI++)
         {
-            InputNeurons[i] = new();
-        }
-        for (int i = 0; i < OutputNeurons.Length; i++) 
-        {
-            OutputNeurons[i] = new();
+            for (int neuronI = 0; neuronI < SIZE[layerI]; neuronI++)
+            {
+                Layers[layerI].Add(new Neuron());
+            }
         }
 
         // Synapses
-        int synI = 0;
+        for (int layerI = 0; layerI < Layers.Length; layerI++)
+        {
+            for (int neuronI = 0; neuronI < SIZE[layerI]; neuronI++)
+            {
+                // Input
+                if (layerI > 0)
+                {
+                    for (int neuronPreI = 0; neuronPreI < SIZE[layerI - 1]; neuronPreI++)
+                    {
+                        for (int synI = 0; synI < Parameters.SYN_PER_NEURON; synI++)
+                        {
+                            Layers[layerI][neuronI].SynapsesPre.Add();
+                        }
+                    }
+                }
+
+                // Output
+            }
+        }
+
         for (int inputNeuronI = 0; inputNeuronI < InputNeurons.Length; inputNeuronI++)
         {
             for (int outputNeuronI = 0; outputNeuronI < OutputNeurons.Length; outputNeuronI++)
@@ -34,13 +49,17 @@ public sealed class Network
                 (double[] weights, double[] delays) = GetSynapseInitValsRnd();
                 for (int synapseI = 0; synapseI < Parameters.SYN_PER_NEURON; synapseI++)
                 {
-                    Synapses[synI++] = new Synapse()
+                    Synapses[synI] = new Synapse()
                     {
                         Weight = weights[synapseI],
                         Delay = delays[synapseI],
                         NeuronPre = InputNeurons[inputNeuronI],
                         NeuronPost = OutputNeurons[outputNeuronI],
                     };
+
+                    InputNeurons[inputNeuronI].SynapsesPost.Add(Synapses[synI]);
+                    OutputNeurons[inputNeuronI].SynapsesPre.Add(Synapses[synI]);
+                    synI++;
                 }
             }
         }
@@ -145,7 +164,7 @@ public sealed class Network
         // Neurons
         for (int i = 0; i < OutputNeurons.Length; i++)
         {
-            OutputNeurons[i].UpdateInputWeights(Synapses.Where(s => s.NeuronPost == OutputNeurons[i]).ToList(), desiredSpikeTimes[i]);
+            OutputNeurons[i].UpdateInputWeights(desiredSpikeTimes[i]);
         }
     }
 
