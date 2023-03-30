@@ -93,14 +93,17 @@ public sealed class Neuron
 
         List<Neuron> preNeurons = preSynapses.Where(s => s.NeuronPost == this).Select(s => s.NeuronPre).Distinct().ToList();
         Dictionary<Synapse, double> gradients = CalculateGradientsForAllInputWeights(preNeurons, preSynapses);
+        Dictionary<Synapse, double> deltaWs = new();
         foreach (Neuron preNeuron in preNeurons)
         {
             foreach (Synapse synapsePre in preSynapses.Where(s => s.NeuronPre == preNeuron))
             {
-                double deltaW = -Parameters.LEARNING_RATE * gradients[synapsePre] * (Spikes.FirstOrDefault() - desiredFirstSpikeTime);
-                synapsePre.Weight += deltaW;
+                deltaWs[synapsePre] -= Parameters.LEARNING_RATE * gradients[synapsePre] * (Spikes.FirstOrDefault() - desiredFirstSpikeTime);
+                
             }
         }
+
+        // synapsePre.Weight += deltaW;
     }
 
     /// <summary>

@@ -40,7 +40,7 @@
         /// <summary>
         /// τ_r: Time-constant
         /// </summary>
-        public const double TAU_R = 20;
+        public const double TAU_R = 4;
 
         public const int SYN_PER_NEURON = 3;
         public const int INTERVAL_DURATION = 25;
