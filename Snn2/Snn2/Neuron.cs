@@ -21,7 +21,7 @@ public sealed class Neuron
     /// <param name="s"></param>
     /// <returns></returns>
     public static double SpikeResponseFunction(double s) =>
-        s >= 0 ? (Math.Exp(-s / Parameters.TAU_M) - Math.Exp(-s / Parameters.TAU_S)) : 0;
+        s >= 0 ? (-Math.Exp(-s / Parameters.TAU_M) / Parameters.TAU_M + Math.Exp(-s / Parameters.TAU_S) / Parameters.TAU_S) : 0;
 
     /// <summary>
     /// Spike response function ε(s) (2.3) derived in respect to s
@@ -37,7 +37,7 @@ public sealed class Neuron
     /// <param name="s"></param>
     /// <returns></returns>
     public static double ExponentialDecay(double s) =>
-        s >= 0 ? -Parameters.THRESHOLD * Math.Exp(-s / Parameters.TAU_R) : 0;
+        s >= 0 ? -Math.Exp(-s / Parameters.TAU_R) : 0;
 
     /// <summary>
     /// Potential (2.7)
@@ -58,11 +58,11 @@ public sealed class Neuron
         {
             throw new Exception("No pre-neurons detected");
         }
-        for (int preNeuronI = 0; preNeuronI < preNeurons.Count; preNeuronI++)
+        foreach (Neuron preNeuron in preNeurons)
         {
-            foreach (double spikePre in preNeurons[preNeuronI].Spikes)
+            foreach (double spikePre in preNeuron.Spikes)
             {
-                foreach (Synapse synapsePre in preSynapses.Where(s => s.NeuronPre == preNeurons[preNeuronI]))
+                foreach (Synapse synapsePre in preSynapses.Where(s => s.NeuronPre == preNeuron))
                 {
                     secondSum += synapsePre.Weight * SpikeResponseFunction(t - spikePre - synapsePre.Delay);
                 }
@@ -71,7 +71,7 @@ public sealed class Neuron
 
         Potential = firstSum + secondSum; // Math.Max(firstSum + secondSum, 0);
 
-        if (Potential >= Parameters.THRESHOLD)
+        if (Potential > Parameters.THRESHOLD)
         {
             Spikes.Add(t);
             return true;
@@ -92,12 +92,12 @@ public sealed class Neuron
         }
 
         List<Neuron> preNeurons = preSynapses.Where(s => s.NeuronPost == this).Select(s => s.NeuronPre).Distinct().ToList();
-        for (int preNeuronI = 0; preNeuronI < preNeurons.Count; preNeuronI++)
+        Dictionary<Synapse, double> gradients = CalculateGradientsForAllInputWeights(preNeurons, preSynapses);
+        foreach (Neuron preNeuron in preNeurons)
         {
-            double gradient = CalculateGradient(preSynapses.Where(s => s.NeuronPre == preNeurons[preNeuronI] && s.NeuronPost == this).ToList());
-            double deltaW = -Parameters.LEARNING_RATE * gradient * (Spikes.FirstOrDefault() - desiredFirstSpikeTime);
-            foreach (Synapse synapsePre in preSynapses.Where(s => s.NeuronPre == preNeurons[preNeuronI]))
-            {               
+            foreach (Synapse synapsePre in preSynapses.Where(s => s.NeuronPre == preNeuron))
+            {
+                double deltaW = -Parameters.LEARNING_RATE * gradients[synapsePre] * (Spikes.FirstOrDefault() - desiredFirstSpikeTime);
                 synapsePre.Weight += deltaW;
             }
         }
@@ -106,29 +106,49 @@ public sealed class Neuron
     /// <summary>
     /// (3.13)
     /// </summary>
-    /// <param name="preSynapsesFromSinglePreNeuron"></param>
+    /// <param name="preSynapses"></param>
     /// <returns></returns>
-    private double CalculateGradient(List<Synapse> preSynapsesFromSinglePreNeuron)
+    private Dictionary<Synapse, double> CalculateGradientsForAllInputWeights(List<Neuron> preNeurons, List<Synapse> preSynapses)
     {
-        double numerator = 0;
+        Dictionary<Synapse, double> gradients = new();
+
+        // i
         double denominator = 0;
-        foreach (Synapse synapsePre in preSynapsesFromSinglePreNeuron)
+        foreach (Neuron preNeuron in preNeurons)
         {
-            foreach (double spikePre in synapsePre.NeuronPre.Spikes)
+            // k
+            foreach (Synapse synapsePre in preSynapses.Where(s => s.NeuronPre == preNeuron))
             {
-                double s = Spikes.FirstOrDefault() - spikePre - synapsePre.Delay;
-                numerator += SpikeResponseFunction(s);
-                denominator += synapsePre.Weight * SpikeResponseFunctionDerived(s);
+                foreach (double spikePre in preNeuron.Spikes)
+                {
+                    denominator += synapsePre.Weight * SpikeResponseFunctionDerived(Spikes.First() - spikePre - synapsePre.Delay);
+                }
             }
         }
 
-        double gradient = -numerator / denominator;
-        if (gradient < 0.1 || double.IsNaN(gradient))
+        // i
+        foreach (Neuron preNeuron in preNeurons)
         {
-            gradient = 0.1;
+            // k
+            foreach (Synapse synapsePre in preSynapses.Where(s => s.NeuronPre == preNeuron))
+            {
+                double numerator = 0;
+
+                foreach (double spikePre in preNeuron.Spikes)
+                {
+                    numerator += SpikeResponseFunction(Spikes.First() - spikePre - synapsePre.Delay);                    
+                }
+
+                double gradient = -numerator / denominator;
+                if (gradient < 0.1 || double.IsNaN(gradient))
+                {
+                    gradient = 0.1;
+                }
+                gradients[synapsePre] = gradient;
+            }
         }
 
-        return gradient;
+        return gradients;
     }
 
     public void Reset()

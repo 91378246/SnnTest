@@ -1,3 +1,4 @@
 ﻿using Snn2;
 
-TestPoisson.Test();
+TestXor.Test();
+// TestPoisson.Test();

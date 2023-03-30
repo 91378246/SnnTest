@@ -19,6 +19,7 @@
         // H(s): Heavy-side step function (H(s) = 0 for s ≤ 0 and H(s) = 1 for s > 0)
         // l: Set of delays
         // d: Delay
+        // k: Synapse
 
         /// <summary>
         /// ϑ
@@ -41,7 +42,7 @@
         /// </summary>
         public const double TAU_R = 20;
 
-        public const int SYN_PER_NEURON = 20;
+        public const int SYN_PER_NEURON = 3;
         public const int INTERVAL_DURATION = 25;
         public const double MIN_DELAY = 1;
         public const double MAX_DELAY = 8;

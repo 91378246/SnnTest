@@ -2,8 +2,8 @@
 
 public sealed class Network
 {
-    private const int INPUT_NEURON_COUNT = 10;
-    private const int OUTPUT_NEURON_COUNT = 4;
+    private const int INPUT_NEURON_COUNT = 2;
+    private const int OUTPUT_NEURON_COUNT = 2;
 
     private readonly Neuron[] InputNeurons = new Neuron[INPUT_NEURON_COUNT];
     private readonly Neuron[] OutputNeurons = new Neuron[OUTPUT_NEURON_COUNT];

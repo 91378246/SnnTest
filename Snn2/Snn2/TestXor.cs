@@ -8,7 +8,7 @@ namespace Snn2
         {
             const int SEED = 2;
             const int EPOCHS = 100;
-            const int SAMPLE_COUNT = 1000;
+            const int SAMPLE_COUNT = 10;
             const int TEST_COUNT = 100;
             Random RND = new(SEED);
 
