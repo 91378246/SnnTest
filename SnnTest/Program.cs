@@ -443,6 +443,9 @@ sealed class Neuron
     public static double SpikeResponseFunction_23(double s, double tauM = TAU_M, double tauS = TAU_S) =>
         s >= 0 ? (Math.Exp(-s / tauM) - Math.Exp(-s / tauS)) : 0;
 
+    public static double SpikeResponseFunction_23Derived(double s, double tauM = TAU_M, double tauS = TAU_S) =>
+        s >= 0 ? (-1 / tauM) * Math.Exp(-s / tauM) + (1 / tauS) * Math.Exp(-s / tauS) : 0;
+
     public static double SpikeResponseFunction_24(double s, double tau) =>
         s >= 0 ? s / tau * Math.Exp(1 - s / tau) : 0;
 
